@@ -34,24 +34,29 @@ VECTOR_DB_CONFIG = {
     # 检索数量
     "TOP_K": 5,
     # 元数据过滤
-    "METADATA_FILTERS": {
-        "min_year": 2018,
-        "max_year": None
-    }
+    "METADATA_FILTERS": None
 }
 
 # LLM配置
 LLM_CONFIG = {
     # 模型名称
-    "MODEL_NAME": "gpt-4o-mini",
+    "MODEL_NAME": "inclusionAI/Ling-mini-2.0",
     # API提供商
     "API_PROVIDER": "openai",
-    # API密钥（从环境变量读取）
-    "API_KEY": "${OPENAI_API_KEY}",
+    # API密钥
+    "API_KEY": "sk-rejkwjvqwerqgfmolygzjxqqoaejovbkeieyuwxtogokvgqp",
+    # API基础URL
+    "BASE_URL": "https://api.siliconflow.cn/v1",
     # 温度参数
     "TEMPERATURE": 0.3,
+    # Top P参数
+    "TOP_P": 0.7,
     # 最大输出长度
-    "MAX_TOKENS": 1000,
+    "MAX_TOKENS": 10000,
+    # 超时时间（秒）
+    "TIMEOUT": 600,
+    # 思考模式
+    "THINKING": "disabled",
     # 上下文窗口大小
     "CONTEXT_WINDOW": 16384,
     # 系统提示

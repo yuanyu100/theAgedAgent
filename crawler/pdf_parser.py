@@ -2,8 +2,7 @@
 
 import os
 import json
-from unstructured.partition.pdf import partition_pdf
-from unstructured.staging.base import elements_to_json
+from pdfminer.high_level import extract_text
 from config.crawler_config import STORAGE_CONFIG
 
 class PDFParser:
@@ -17,23 +16,11 @@ class PDFParser:
         try:
             print(f"开始解析PDF: {pdf_path}")
             
-            # 使用unstructured解析PDF
-            elements = partition_pdf(
-                filename=pdf_path,
-                strategy="hi_res",
-                extract_images_in_pdf=False,
-                infer_table_structure=True,
-                chunking_strategy="by_title",
-                max_characters=4000,
-                new_after_n_chars=3800,
-                combine_text_under_n_chars=2000
-            )
-            
-            # 转换为JSON格式
-            elements_json = elements_to_json(elements)
+            # 使用pdfminer.six提取文本
+            text = extract_text(pdf_path)
             
             # 提取元数据和内容
-            parsed_data = self.extract_metadata_and_content(elements_json, pdf_path, source_name)
+            parsed_data = self.extract_metadata_and_content(text, pdf_path, source_name)
             
             # 保存解析结果
             self.save_parsed_result(parsed_data, pdf_path, source_name)
@@ -43,7 +30,7 @@ class PDFParser:
             print(f"Error parsing PDF {pdf_path}: {e}")
             return None
     
-    def extract_metadata_and_content(self, elements_json, pdf_path, source_name):
+    def extract_metadata_and_content(self, text, pdf_path, source_name):
         """提取元数据和内容"""
         parsed_data = {
             "source": source_name,
@@ -59,43 +46,46 @@ class PDFParser:
             "tables": []
         }
         
-        # 提取标题（通常是第一个大标题）
-        for element in elements_json:
-            if element["type"] == "Title" and element["text"]:
-                parsed_data["metadata"]["title"] = element["text"]
-                break
+        # 提取标题（使用前几行作为标题）
+        lines = text.split('\n')
+        title_lines = []
+        for line in lines[:10]:  # 检查前10行
+            line_stripped = line.strip()
+            if line_stripped and len(line_stripped) > 10 and len(line_stripped) < 100:
+                title_lines.append(line_stripped)
+                if len(title_lines) >= 2:
+                    break
         
-        # 提取内容
-        current_section = {
-            "type": "text",
-            "content": "",
-            "section": ""
-        }
+        if title_lines:
+            parsed_data["metadata"]["title"] = ' '.join(title_lines)
+        else:
+            # 如果没有找到合适的标题，使用文件名
+            parsed_data["metadata"]["title"] = os.path.basename(pdf_path).replace('.pdf', '')
         
-        for element in elements_json:
-            if element["type"] == "Title":
-                # 保存当前section
-                if current_section["content"]:
-                    parsed_data["content"].append(current_section)
-                
-                # 开始新section
-                current_section = {
+        # 提取内容（按段落分割）
+        paragraphs = []
+        current_paragraph = ""
+        
+        for line in lines:
+            line_stripped = line.strip()
+            if line_stripped:
+                current_paragraph += line + "\n"
+            else:
+                if current_paragraph.strip():
+                    paragraphs.append(current_paragraph.strip())
+                    current_paragraph = ""
+        
+        if current_paragraph.strip():
+            paragraphs.append(current_paragraph.strip())
+        
+        # 将段落组织为内容
+        for i, paragraph in enumerate(paragraphs):
+            if len(paragraph) > 50:
+                parsed_data["content"].append({
                     "type": "text",
-                    "content": "",
-                    "section": element["text"]
-                }
-            elif element["type"] == "Text":
-                current_section["content"] += element["text"] + "\n"
-            elif element["type"] == "Table":
-                # 保存表格
-                parsed_data["tables"].append({
-                    "content": element["text"],
-                    "section": current_section["section"]
+                    "content": paragraph,
+                    "section": f"Section {i+1}"
                 })
-        
-        # 保存最后一个section
-        if current_section["content"]:
-            parsed_data["content"].append(current_section)
         
         return parsed_data
     

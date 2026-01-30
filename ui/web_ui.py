@@ -1,5 +1,6 @@
 # Web界面模块
 
+import os
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 from rag_engine.intent_recognizer import IntentRecognizer
@@ -9,7 +10,18 @@ from config.model_config import SAFETY_CONFIG
 
 class WebUI:
     def __init__(self):
-        self.app = Flask(__name__)
+        import os
+        # 获取当前文件目录
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # 创建templates目录路径
+        template_dir = os.path.join(current_dir, 'templates')
+        # 确保templates目录存在
+        os.makedirs(template_dir, exist_ok=True)
+        # 创建默认模板
+        self.create_default_template(template_dir)
+        
+        # 初始化Flask应用，指定模板目录
+        self.app = Flask(__name__, template_folder=template_dir)
         CORS(self.app)
         self.setup_routes()
         
@@ -95,14 +107,6 @@ class WebUI:
     
     def run(self, host='0.0.0.0', port=5000, debug=False):
         """运行Web服务器"""
-        # 确保templates目录存在
-        import os
-        template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
-        if not os.path.exists(template_dir):
-            os.makedirs(template_dir)
-            # 创建默认的index.html
-            self.create_default_template(template_dir)
-        
         self.app.run(host=host, port=port, debug=debug)
     
     def create_default_template(self, template_dir):

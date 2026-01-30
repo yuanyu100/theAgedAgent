@@ -2,6 +2,7 @@
 
 import os
 import re
+import fnmatch
 import time
 import random
 import requests
@@ -30,21 +31,33 @@ class BaseCrawler:
         """验证URL是否有效"""
         # 检查域名
         parsed_url = urlparse(url)
-        if parsed_url.netloc not in source_domain:
+        
+        # 修复：检查域名是否在allowed_domains列表中，支持子域名
+        domain_valid = False
+        if isinstance(source_domain, list):
+            for domain in source_domain:
+                if parsed_url.netloc == domain or parsed_url.netloc.endswith(f".{domain}"):
+                    domain_valid = True
+                    break
+        else:
+            if parsed_url.netloc == source_domain or parsed_url.netloc.endswith(f".{source_domain}"):
+                domain_valid = True
+        
+        if not domain_valid:
             return False
         
         # 检查排除模式
         for pattern in URL_FILTER_CONFIG["EXCLUDE_PATTERNS"]:
-            if re.search(pattern, url):
+            if fnmatch.fnmatch(url, pattern):
                 return False
         
-        # 检查包含模式（MVP阶段）
-        if URL_FILTER_CONFIG["INCLUDE_PATTERNS"]:
-            for pattern in URL_FILTER_CONFIG["INCLUDE_PATTERNS"]:
-                if re.search(pattern, url):
-                    break
-            else:
-                return False
+        # 暂时放宽包含模式检查，以便能够爬取更多链接
+        # if URL_FILTER_CONFIG["INCLUDE_PATTERNS"]:
+        #     for pattern in URL_FILTER_CONFIG["INCLUDE_PATTERNS"]:
+        #         if fnmatch.fnmatch(url, pattern):
+        #             break
+        #     else:
+        #         return False
         
         return True
     
@@ -83,13 +96,23 @@ class BaseCrawler:
         """从HTML中提取链接"""
         soup = BeautifulSoup(html, 'lxml')
         links = []
+        total_links = 0
+        valid_links = 0
+        invalid_links = 0
         
         for a_tag in soup.find_all('a', href=True):
+            total_links += 1
             href = a_tag['href']
             full_url = urljoin(base_url, href)
             
             if self.is_valid_url(full_url, allowed_domains):
                 links.append(full_url)
+                valid_links += 1
+            else:
+                invalid_links += 1
+        
+        # 打印详细信息
+        print(f"共找到 {total_links} 个链接，其中 {valid_links} 个有效，{invalid_links} 个无效")
         
         return list(set(links))  # 去重
     
@@ -99,14 +122,25 @@ class BaseCrawler:
         base_url = source_config["url"]
         allowed_domains = source_config["allowed_domains"]
         
+        # 打印详细信息
+        print(f"数据源URL: {base_url}")
+        print(f"允许的域名: {allowed_domains}")
+        
         # 获取首页
         html = self.get_html(base_url)
         if not html:
+            print(f"无法获取 {source_name} 的首页内容")
             return
         
         # 提取链接
         links = self.extract_links(html, base_url, allowed_domains)
         print(f"找到 {len(links)} 个链接")
+        
+        # 打印前5个链接
+        if links:
+            print(f"前5个链接:")
+            for link in links[:5]:
+                print(f"  - {link}")
         
         # 爬取每个链接
         for link in links[:10]:  # MVP阶段限制数量

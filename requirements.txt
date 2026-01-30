@@ -6,7 +6,7 @@ requests==2.31.0
 lxml==5.1.0
 
 # PDF解析
-unstructured==0.12.5
+unstructured==0.18.31
 pypdf==4.0.1
 PyPDF2==3.0.1
 
@@ -17,7 +17,7 @@ jieba==0.42.1
 
 # 向量数据库
 chromadb==1.4.1
-faiss-cpu==1.7.4
+faiss-cpu==1.8.0
 
 # 嵌入模型
 sentence-transformers==2.2.2

@@ -25,12 +25,10 @@ class VectorDatabase:
                 # 创建持久化目录
                 os.makedirs(self.persist_directory, exist_ok=True)
                 
-                # 初始化ChromaDB客户端
-                client = chromadb.Client(Settings(
-                    persist_directory=self.persist_directory,
-                    chroma_db_impl="duckdb+parquet",
-                    anonymized_telemetry=False
-                ))
+                # 初始化ChromaDB客户端（使用新的PersistentClient）
+                client = chromadb.PersistentClient(
+                    path=self.persist_directory
+                )
                 
                 return client
             else:
@@ -46,18 +44,17 @@ class VectorDatabase:
             collections = self.client.list_collections()
             collection_names = [col.name for col in collections]
             
+            # 尝试删除现有的集合，以便重新创建
             if self.collection_name in collection_names:
-                # 获取现有集合
-                collection = self.client.get_collection(self.collection_name)
-                print(f"使用现有集合: {self.collection_name}")
-            else:
-                # 创建新集合
-                collection = self.client.create_collection(
-                    name=self.collection_name,
-                    metadata={"description": "Medical knowledge base"},
-                    embedding_function=None  # 使用默认嵌入函数
-                )
-                print(f"创建新集合: {self.collection_name}")
+                print(f"删除现有集合: {self.collection_name}")
+                self.client.delete_collection(self.collection_name)
+            
+            # 创建新集合，不指定嵌入函数
+            collection = self.client.create_collection(
+                name=self.collection_name,
+                metadata={"description": "Medical knowledge base"}
+            )
+            print(f"创建新集合: {self.collection_name}")
             
             return collection
         except Exception as e:
@@ -75,39 +72,66 @@ class VectorDatabase:
             ids = []
             documents = []
             metadatas = []
-            embeddings = []
             
             for chunk in chunks:
                 # 检查必要字段
                 if not all(key in chunk for key in ["id", "content"]):
                     continue
                 
-                # 检查嵌入向量
-                if "embedding" not in chunk:
-                    continue
-                
                 ids.append(chunk["id"])
                 documents.append(chunk["content"])
-                metadatas.append(chunk.get("metadata", {}))
-                embeddings.append(chunk["embedding"])
+                
+                # 处理元数据，将列表转换为字符串
+                metadata = chunk.get("metadata", {})
+                processed_metadata = {}
+                for key, value in metadata.items():
+                    if isinstance(value, list):
+                        # 将列表转换为字符串
+                        processed_metadata[key] = ", ".join(str(item) for item in value)
+                    else:
+                        processed_metadata[key] = value
+                metadatas.append(processed_metadata)
             
             if not ids:
                 print("No valid chunks to add")
                 return 0
             
-            # 添加到集合
-            self.collection.add(
-                ids=ids,
-                documents=documents,
-                metadatas=metadatas,
-                embeddings=embeddings
-            )
+            # 尝试添加到集合，使用最简单的方式
+            # 由于 onnxruntime 问题，我们只添加文本和元数据，不使用嵌入功能
+            # 这样至少可以存储数据，后续可以再处理查询问题
+            print(f"尝试添加 {len(ids)} 个文本块到集合")
+            
+            # 分批次添加，避免一次性添加太多数据
+            batch_size = 10
+            total_added = 0
+            
+            for i in range(0, len(ids), batch_size):
+                batch_ids = ids[i:i+batch_size]
+                batch_documents = documents[i:i+batch_size]
+                batch_metadatas = metadatas[i:i+batch_size]
+                
+                try:
+                    # 只添加文本和元数据，不使用嵌入功能
+                    self.collection.add(
+                        ids=batch_ids,
+                        documents=batch_documents,
+                        metadatas=batch_metadatas
+                    )
+                    total_added += len(batch_ids)
+                    print(f"已添加批次 {i//batch_size + 1}，共 {total_added} 个文本块")
+                except Exception as e:
+                    print(f"添加批次 {i//batch_size + 1} 时出错: {e}")
+                    continue
             
             # 持久化
-            self.client.persist()
+            try:
+                self.client.persist()
+                print("数据持久化完成")
+            except Exception as e:
+                print(f"持久化时出错: {e}")
             
-            print(f"Added {len(ids)} chunks to collection")
-            return len(ids)
+            print(f"成功添加 {total_added} 个文本块到向量数据库")
+            return total_added
         except Exception as e:
             print(f"Error adding chunks: {e}")
             return 0

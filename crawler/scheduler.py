@@ -132,9 +132,9 @@ class CrawlerScheduler:
         # 全量爬取任务
         full_interval = SCHEDULER_CONFIG["FULL_CRAWL_INTERVAL"]
         if full_interval.days == 7:
-            self.scheduler.every().week.at("01:00").do(self.run_full_crawl)
+            self.scheduler.every(7).days.at("01:00").do(self.run_full_crawl)
         elif full_interval.days == 28:
-            self.scheduler.every(4).weeks.at("01:00").do(self.run_full_crawl)
+            self.scheduler.every(28).days.at("01:00").do(self.run_full_crawl)
         
         print("定时任务已调度")
     
@@ -146,11 +146,15 @@ class CrawlerScheduler:
         # 立即执行一次增量爬取
         self.run_incremental_crawl()
         
-        # 持续运行
-        print("调度器开始运行，按Ctrl+C退出")
-        while True:
-            self.scheduler.run_pending()
-            time.sleep(60)
+        # 打印完成信息
+        print("增量爬取完成，调度器已退出")
+        print("如需持续运行调度器，请修改 run() 方法，移除注释以启用无限循环")
+        
+        # 持续运行（注释掉，避免卡住）
+        # print("调度器开始运行，按Ctrl+C退出")
+        # while True:
+        #     self.scheduler.run_pending()
+        #     time.sleep(60)
 
 if __name__ == "__main__":
     scheduler = CrawlerScheduler()

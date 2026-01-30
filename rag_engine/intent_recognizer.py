@@ -75,6 +75,10 @@ class IntentRecognizer:
         max_intent = max(scores, key=scores.get)
         max_score = scores[max_intent]
         
+        # 特殊处理：对于明确的问候语和闲聊语句，即使得分低于阈值，也识别为chat或greeting
+        if max_intent in ["chat", "greeting"] and max_score > 0:
+            return {"intent": max_intent, "confidence": max_score}
+        
         # 应用阈值
         if max_score < self.threshold:
             # 如果得分低于阈值，默认为医疗咨询
@@ -88,8 +92,10 @@ class IntentRecognizer:
         keywords = self.intent_keywords.get(intent, [])
         
         # 关键词匹配
+        matched_count = 0
         for keyword in keywords:
             if keyword in text:
+                matched_count += 1
                 score += 1.0
         
         # 正则表达式匹配（仅医疗咨询）
@@ -98,12 +104,28 @@ class IntentRecognizer:
                 if re.search(pattern, text):
                     score += 1.5
         
-        # 归一化得分
-        if keywords:
-            score = score / (len(keywords) * 0.5)  # 归一化到0-2范围
-        
-        # 限制得分范围
-        score = min(score, 1.0)
+        # 计算得分
+        if intent == "medical_consultation":
+            # 对于医疗咨询，每匹配一个关键词得0.3分
+            score = min(0.3 * matched_count, 1.0)
+        elif intent in ["chat", "greeting"]:
+            # 对于问候和闲聊
+            if matched_count > 0:
+                # 检查是否包含医疗关键词
+                has_medical_keywords = False
+                for med_keyword in self.intent_keywords.get("medical_consultation", []):
+                    if med_keyword in text:
+                        has_medical_keywords = True
+                        break
+                
+                if has_medical_keywords:
+                    # 如果包含医疗关键词，大幅降低聊天得分
+                    score = 0.2
+                else:
+                    # 纯聊天或问候
+                    score = 0.8
+            else:
+                score = 0.0
         
         return score
     

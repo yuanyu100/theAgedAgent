@@ -1,6 +1,7 @@
 # 文本分块器
 
 import re
+import uuid
 from config.model_config import EMBEDDING_CONFIG
 
 class MedicalChunker:
@@ -39,14 +40,34 @@ class MedicalChunker:
         semantic_chunks = self.semantic_split(content)
         
         for i, semantic_chunk in enumerate(semantic_chunks):
-            # 检查大小
-            if len(semantic_chunk) > self.max_chunk_size:
-                # 进一步切分
-                sub_chunks = self.size_split(semantic_chunk)
-                for j, sub_chunk in enumerate(sub_chunks):
+                # 检查大小
+                if len(semantic_chunk) > self.max_chunk_size:
+                    # 进一步切分
+                    sub_chunks = self.size_split(semantic_chunk)
+                    for j, sub_chunk in enumerate(sub_chunks):
+                        # 使用UUID生成唯一ID
+                        unique_id = str(uuid.uuid4())[:8]
+                        chunk = {
+                            "id": f"{document['source']}_{document['filename']}_{unique_id}",
+                            "content": sub_chunk,
+                            "metadata": {
+                                "document_title": document['metadata'].get('title', ''),
+                                "section_title": section_title,
+                                "source": document['source'],
+                                "source_organization": document['metadata'].get('source_organization', ''),
+                                "publication_date": document['metadata'].get('publication_date', ''),
+                                "authors": document['metadata'].get('authors', []),
+                                "chunk_type": "text",
+                                "chunk_index": i * 100 + j
+                            }
+                        }
+                        chunks.append(chunk)
+                else:
+                    # 使用UUID生成唯一ID
+                    unique_id = str(uuid.uuid4())[:8]
                     chunk = {
-                        "id": f"{document['source']}_{document['filename']}_section_{i}_{j}",
-                        "content": sub_chunk,
+                        "id": f"{document['source']}_{document['filename']}_{unique_id}",
+                        "content": semantic_chunk,
                         "metadata": {
                             "document_title": document['metadata'].get('title', ''),
                             "section_title": section_title,
@@ -55,26 +76,10 @@ class MedicalChunker:
                             "publication_date": document['metadata'].get('publication_date', ''),
                             "authors": document['metadata'].get('authors', []),
                             "chunk_type": "text",
-                            "chunk_index": i * 100 + j
+                            "chunk_index": i
                         }
                     }
                     chunks.append(chunk)
-            else:
-                chunk = {
-                    "id": f"{document['source']}_{document['filename']}_section_{i}",
-                    "content": semantic_chunk,
-                    "metadata": {
-                        "document_title": document['metadata'].get('title', ''),
-                        "section_title": section_title,
-                        "source": document['source'],
-                        "source_organization": document['metadata'].get('source_organization', ''),
-                        "publication_date": document['metadata'].get('publication_date', ''),
-                        "authors": document['metadata'].get('authors', []),
-                        "chunk_type": "text",
-                        "chunk_index": i
-                    }
-                }
-                chunks.append(chunk)
         
         return chunks
     
@@ -170,8 +175,11 @@ class MedicalChunker:
         chunks = []
         current_pos = 0
         text_length = len(text)
+        max_iterations = 100  # 防止无限循环
+        iteration_count = 0
         
-        while current_pos < text_length:
+        while current_pos < text_length and iteration_count < max_iterations:
+            iteration_count += 1
             end_pos = min(current_pos + self.max_chunk_size, text_length)
             
             # 尝试在句子边界切分
@@ -185,9 +193,12 @@ class MedicalChunker:
             chunk = text[current_pos:end_pos]
             chunks.append(chunk)
             
-            current_pos = end_pos - self.overlap_size
-            if current_pos <= 0:
-                current_pos = end_pos
+            # 计算下一个位置，确保前进
+            next_pos = end_pos - self.overlap_size
+            if next_pos <= current_pos:
+                # 如果没有前进，强制前进
+                next_pos = end_pos
+            current_pos = next_pos
         
         return chunks
     
